@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+import threading
 from datetime import datetime
 from pathlib import Path
 
@@ -56,16 +57,19 @@ class Storage:
     def __init__(self, path: Path | str) -> None:
         if str(path) != ":memory:":
             Path(path).parent.mkdir(parents=True, exist_ok=True)
+        # One connection shared by the API's worker threads, serialised by a lock.
         self.conn = sqlite3.connect(str(path), check_same_thread=False)
         self.conn.row_factory = sqlite3.Row
         self.conn.executescript(SCHEMA)
+        self._lock = threading.RLock()
 
     # -------------------------------------------------------------- sessions
     def get_session(self, session_id: str) -> sqlite3.Row | None:
-        return self.conn.execute("SELECT * FROM sessions WHERE id = ?", (session_id,)).fetchone()
+        with self._lock:
+            return self.conn.execute("SELECT * FROM sessions WHERE id = ?", (session_id,)).fetchone()
 
     def create_session(self, session_id: str, provider: str, customer_id: int | None, now: datetime) -> None:
-        with self.conn:
+        with self._lock, self.conn:
             self.conn.execute(
                 "INSERT INTO sessions (id, provider, customer_id, created_at, updated_at) "
                 "VALUES (?, ?, ?, ?, ?)",
@@ -74,15 +78,16 @@ class Storage:
 
     # -------------------------------------------------------------- messages
     def load_messages(self, session_id: str) -> list[dict]:
-        rows = self.conn.execute(
-            "SELECT payload FROM messages WHERE session_id = ? ORDER BY id", (session_id,)
-        ).fetchall()
+        with self._lock:
+            rows = self.conn.execute(
+                "SELECT payload FROM messages WHERE session_id = ? ORDER BY id", (session_id,)
+            ).fetchall()
         return [json.loads(row["payload"]) for row in rows]
 
     def append_turn(self, session_id: str, messages: list[dict], trace: dict, now: datetime) -> None:
         """Append a whole turn atomically: history is append-only, never rewritten."""
         stamp = now.isoformat()
-        with self.conn:
+        with self._lock, self.conn:
             self.conn.executemany(
                 "INSERT INTO messages (session_id, payload, created_at) VALUES (?, ?, ?)",
                 [(session_id, json.dumps(m, ensure_ascii=False), stamp) for m in messages],
@@ -115,7 +120,7 @@ class Storage:
         contact: str | None,
         now: datetime,
     ) -> str:
-        with self.conn:
+        with self._lock, self.conn:
             cursor = self.conn.execute(
                 "INSERT INTO tickets (session_id, category, summary, order_id, customer_id, contact, "
                 "created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
@@ -126,4 +131,5 @@ class Storage:
         return protocol
 
     def tickets(self) -> list[sqlite3.Row]:
-        return self.conn.execute("SELECT * FROM tickets ORDER BY id").fetchall()
+        with self._lock:
+            return self.conn.execute("SELECT * FROM tickets ORDER BY id").fetchall()
