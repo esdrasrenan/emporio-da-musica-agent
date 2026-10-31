@@ -129,7 +129,11 @@ class OrderDesk:
             "status_detail": detail,
             "order_date": f"{order.order_date:%d/%m/%Y}",
             "items": [
-                {"product": self.data.products[i.product_id].name, "quantity": i.quantity}
+                {
+                    "product": self.data.products[i.product_id].name,
+                    "category": self.data.categories[self.data.products[i.product_id].category_id].name,
+                    "quantity": i.quantity,
+                }
                 for i in order.items
             ],
             "total": format_brl(order.total),

@@ -15,7 +15,7 @@ from decimal import Decimal
 from emporio.data.models import Product, StoreData
 from emporio.money import format_brl
 from emporio.pricing import describe_installments, price_info
-from emporio.text import singular, tokens
+from emporio.text import contains_phrase, singular, tokens
 
 STOPWORDS = frozenset(
     """a o as os um uma uns umas de da do das dos e ou em no na nos nas para pra pro por com
@@ -57,6 +57,16 @@ def _tags(product: Product) -> list[str]:
     elif product.specs.get("strings") == "nylon":
         tags += ["nylon", "classico"]
     return tags
+
+
+# Name keywords that define what kind of instrument a product is (used to pick alternatives).
+KIND_TERMS = ("7 cordas", "soprano", "concert", "tenor", "baritono", "dreadnought", "folk")
+
+
+def _kind(product: Product) -> set[str]:
+    words = tokens(product.name)
+    features = {f"{k}={v}" for k, v in product.specs.items() if k in ("strings", "electronics")}
+    return features | {term for term in KIND_TERMS if contains_phrase(words, term)}
 
 
 @dataclass
@@ -147,15 +157,30 @@ class Catalog:
         """Available products of the same category: same kind first (string type,
         pickup), then closest in price."""
 
-        def differences(other: Product) -> int:
-            return sum(other.specs.get(k) != product.specs.get(k) for k in ("strings", "electronics"))
+        kind = _kind(product)
+
+        def distance(other: Product) -> tuple[float, int]:
+            mismatches = len(kind ^ _kind(other))  # each differing attribute counts twice
+            price_gap = float(abs(other.price - product.price) / product.price)
+            return 1.5 * mismatches + 2 * price_gap, other.id
 
         pool = [
             p
             for p in self.data.products.values()
             if p.category_id == product.category_id and p.purchasable and p.id != product.id
         ]
-        return sorted(pool, key=lambda p: (differences(p), abs(p.price - product.price), p.id))[:limit]
+        return sorted(pool, key=distance)[:limit]
+
+    def price_label(self, product: Product) -> str:
+        """Short price text; a promotional price always carries the original (policy 6.2)."""
+        price = price_info(product, self.data.active_promotion(product.id))
+        if not price.promotion:
+            return format_brl(price.final_price)
+        discount = price.promotion.discount_percent.normalize()
+        return (
+            f"{format_brl(price.final_price)} (promoção {price.promotion.description}: "
+            f"{discount}% de desconto sobre {format_brl(price.list_price)})"
+        )
 
     # ------------------------------------------------------------------ views
     def view(self, product: Product, with_alternatives: bool = False) -> dict:
@@ -187,11 +212,7 @@ class Catalog:
             out["description"] = product.description
         if with_alternatives and not product.purchasable:
             out["available_alternatives"] = [
-                {
-                    "product_id": alt.id,
-                    "name": alt.name,
-                    "price": format_brl(price_info(alt, self.data.active_promotion(alt.id)).final_price),
-                }
+                {"product_id": alt.id, "name": alt.name, "price": self.price_label(alt)}
                 for alt in self.alternatives(product)
             ]
         return out

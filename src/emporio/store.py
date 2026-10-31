@@ -7,6 +7,8 @@ from functools import lru_cache
 
 import holidays
 
+from emporio.text import tokens
+
 # §2: Monday-Friday 09:00-18:00, Saturday 09:00-13:00, closed on Sundays and holidays.
 OPENING_HOURS = {weekday: (time(9), time(18)) for weekday in range(5)} | {5: (time(9), time(13))}
 WEEKDAYS = (
@@ -68,16 +70,37 @@ def store_status(now: datetime) -> str:
     return f"fechada agora ({reason}); a equipe volta {describe_day(reopening)}, às {reopening:%H:%M}"
 
 
-def turn_context(now: datetime, customer_name: str | None) -> str:
+_ENGLISH = frozenset(
+    "the you your do does have has is are what how much can could would i my we hi hello please "
+    "thanks thank want need any under for with".split()
+)
+_PORTUGUESE = frozenset(
+    "o os as de do da dos das que nao e um uma para com voce voces tem meu minha qual quanto "
+    "oi ola obrigado obrigada quero preciso por favor".split()
+)
+
+
+def is_english(message: str) -> bool:
+    """Cheap, deterministic hint: the model sometimes keeps answering in Portuguese
+    because every tool output is in Portuguese (found by the evals)."""
+    words = tokens(message)
+    english = sum(w in _ENGLISH for w in words)
+    return english >= 2 and english > sum(w in _PORTUGUESE for w in words)
+
+
+def turn_context(now: datetime, customer_name: str | None, english: bool = False) -> str:
     """Operator-provided facts for this turn, sent as a system message."""
     customer = (
         f"Cliente identificado pelo número do WhatsApp: {customer_name}"
         if customer_name
         else "Cliente não identificado"
     )
-    return (
-        "[Contexto do sistema para este turno]\n"
-        f"- Agora em Campo Grande/MS: {describe_day(now)}, {now:%H:%M}.\n"
-        f"- Loja e equipe humana: {store_status(now)}.\n"
-        f"- {customer}."
-    )
+    lines = [
+        "[Contexto do sistema para este turno]",
+        f"- Agora em Campo Grande/MS: {describe_day(now)}, {now:%H:%M}.",
+        f"- Loja e equipe humana: {store_status(now)}.",
+        f"- {customer}.",
+    ]
+    if english:
+        lines.append("- A última mensagem do cliente está em inglês: responda em inglês.")
+    return "\n".join(lines)

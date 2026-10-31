@@ -3,7 +3,7 @@ from datetime import datetime
 import pytest
 
 from emporio.config import STORE_TZ
-from emporio.store import holiday_name, is_open, next_opening, store_status, turn_context
+from emporio.store import holiday_name, is_english, is_open, next_opening, store_status, turn_context
 
 
 def test_manual_is_split_into_its_ten_sections(policies):
@@ -65,3 +65,22 @@ def test_turn_context_mentions_time_status_and_customer():
     assert "domingo, 22/03/2026, 20:00" in context
     assert "volta segunda-feira, 23/03/2026, às 09:00" in context
     assert "Ana Carolina Ferreira" in context
+
+
+@pytest.mark.parametrize(
+    ("message", "expected"),
+    [
+        ("Hi! Do you have electric guitars under R$ 7,000?", True),
+        ("How much is the Takamine GD20?", True),
+        ("Quanto custa o Takamine GD20?", False),
+        ("Vocês têm guitarra Fender?", False),
+        ("ok", False),
+    ],
+)
+def test_english_detection(message, expected):
+    assert is_english(message) is expected
+
+
+def test_turn_context_asks_for_english_when_detected():
+    assert "responda em inglês" in turn_context(at("2026-03-24T10:30"), None, english=True)
+    assert "inglês" not in turn_context(at("2026-03-24T10:30"), None)

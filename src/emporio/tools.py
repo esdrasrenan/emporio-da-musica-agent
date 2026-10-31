@@ -67,7 +67,7 @@ class SearchProductsArgs(_Args):
     sort: Literal["relevance", "price_asc", "price_desc"] = Field(
         "relevance", description="Result order. Relevance applies when 'query' is set."
     )
-    limit: int = Field(10, description="Maximum number of products to return (1-20).")
+    limit: int = Field(12, description="Maximum number of products to return (1-20).")
 
 
 class CartItem(_Args):
@@ -175,6 +175,8 @@ class Toolbox:
         sections = self.policies.customer_sections
         policy["properties"]["sections"]["items"]["enum"] = [s.slug for s in sections]
         toc = "; ".join(f"{s.slug} = {s.heading}" for s in sections)
+        stocked = {p.category_id for p in self.data.products.values()}
+        empty = ", ".join(c.name for c in self.data.categories.values() if c.id not in stocked)
         return [
             ToolSpec(
                 "search_products",
@@ -184,7 +186,8 @@ class Toolbox:
                     "Call it before mentioning ANY price, stock, availability, promotion or product "
                     "detail - never answer those from memory - and to suggest alternatives. "
                     "Combine 'category' and price filters for browsing ('violões até R$ 1.000'); use "
-                    "'query' for a named product or feature."
+                    "'query' for a named product or feature. "
+                    f"Categories with no products at the moment: {empty or 'none'}."
                 ),
                 search,
             ),
@@ -270,8 +273,14 @@ class Toolbox:
             "returned": len(result.products),
             "products": [self.catalog.view(p, with_alternatives=bool(args.query)) for p in result.products],
         }
-        if result.notes:
-            out["notes"] = result.notes
+        notes = list(result.notes)
+        if result.total > len(result.products):
+            notes.append(
+                f"Mostrando {len(result.products)} de {result.total} produtos; todos os {result.total} "
+                "atendem aos filtros. Informe o total ao cliente ou busque de novo com 'limit' maior."
+            )
+        if notes:
+            out["notes"] = notes
         return out
 
     def _quote_purchase(self, args: QuotePurchaseArgs, ctx: SessionContext) -> dict:
@@ -317,14 +326,14 @@ class Toolbox:
             contact=args.contact or (self.data.customers[ctx.customer_id].phone if ctx.customer_id else None),
             now=now,
         )
+        # Only complaints have a deadline in the manual (7.3); nothing else is promised.
         if args.category == "reclamacao":
-            reply = "retorno da equipe em até 24 horas úteis (política 7.3)"
-        elif is_open(now):
-            reply = "a equipe vai retornar pelo contato informado ainda no horário de atendimento de hoje"
+            reply = "a equipe retorna em até 24 horas úteis (política 7.3)"
         else:
+            reply = "a equipe vai analisar e retornar pelo contato informado (o manual não define prazo)"
+        if not is_open(now):
             opening = next_opening(now)
-            reply = (
-                f"a loja está fechada agora; a equipe retorna a partir de "
-                f"{describe_day(opening)}, às {opening:%H:%M}"
+            reply += (
+                f"; a loja está fechada agora e a equipe volta {describe_day(opening)}, às {opening:%H:%M}"
             )
         return {"protocol": protocol, "category": args.category, "next_steps": reply}

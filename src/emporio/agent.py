@@ -17,7 +17,7 @@ from emporio.llm.base import ChatModel, Usage
 from emporio.orders import contact_matches
 from emporio.prompts import FALLBACK_REPLY, REFUSAL_REPLY, SYSTEM_PROMPT
 from emporio.storage import Storage
-from emporio.store import turn_context
+from emporio.store import is_english, turn_context
 from emporio.tools import SessionContext, Toolbox
 
 log = logging.getLogger(__name__)
@@ -62,7 +62,7 @@ class Agent:
         history = self.storage.load_messages(session_id)
         new = [
             self.model.user_message(user_text),
-            self.model.system_message(turn_context(now, ctx.customer_name)),
+            self.model.system_message(turn_context(now, ctx.customer_name, is_english(user_text))),
         ]
         trace: list[dict] = []
         usage = Usage()
