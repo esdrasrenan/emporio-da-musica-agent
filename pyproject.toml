@@ -8,10 +8,11 @@ version = "0.1.0"
 description = "Customer-service agent prototype for Empório da Música, a musical instrument store in Campo Grande/MS."
 readme = "README.md"
 requires-python = ">=3.11"
+# SDK majors pinned to the versions the evals ran on (anthropic 2.3, openai 3.42).
 dependencies = [
-    "anthropic>=1.0",
-    "openai>=1.60",
-    "pydantic>=2.7",
+    "anthropic>=2.3,<3",
+    "openai>=3.0,<4",
+    "pydantic>=2.7,<3",
     "pypdf>=5.0",
     "python-dotenv>=1.0",
     "pyyaml>=6.0",
