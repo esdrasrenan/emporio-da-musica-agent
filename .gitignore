@@ -1,9 +1,9 @@
 # Secrets and local configuration
 .env
 
-# Runtime state (conversations, tickets) and eval outputs
+# Runtime state (conversations, tickets) and ad-hoc eval runs
 .data/
-evals/results/*.json
+evals/results/*_partial.json
 
 # Python
 __pycache__/
