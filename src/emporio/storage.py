@@ -130,6 +130,15 @@ class Storage:
             self.conn.execute("UPDATE tickets SET protocol = ? WHERE id = ?", (protocol, cursor.lastrowid))
         return protocol
 
+    def open_ticket(self, session_id: str, category: str) -> str | None:
+        with self._lock:
+            row = self.conn.execute(
+                "SELECT protocol FROM tickets WHERE session_id = ? AND category = ? AND status = 'open' "
+                "ORDER BY id LIMIT 1",
+                (session_id, category),
+            ).fetchone()
+        return row["protocol"] if row else None
+
     def tickets(self) -> list[sqlite3.Row]:
         with self._lock:
             return self.conn.execute("SELECT * FROM tickets ORDER BY id").fetchall()

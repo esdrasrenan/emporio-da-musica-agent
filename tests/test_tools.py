@@ -92,3 +92,13 @@ def test_ticket_needs_a_contact_unless_identified(toolbox, ctx, storage):
     assert output["protocol"] == "EM-20260324-0001"
     assert "24 horas úteis" in output["next_steps"]
     assert storage.tickets()[0]["order_id"] == 8
+
+
+def test_ticket_registration_is_idempotent_per_conversation(toolbox, ctx, storage):
+    args = {"category": "reclamacao", "summary": "Tarraxa quebrada", "contact": "(67) 99789-0123"}
+    first, _ = run(toolbox, ctx, "create_support_ticket", **args)
+    second, _ = run(toolbox, ctx, "create_support_ticket", **args)
+    assert second["protocol"] == first["protocol"] and second["already_registered"] is True
+    assert len(storage.tickets()) == 1
+    other, _ = run(toolbox, ctx, "create_support_ticket", **{**args, "category": "cancelamento"})
+    assert other["protocol"] != first["protocol"] and "o manual não define prazo" in other["next_steps"]

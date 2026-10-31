@@ -317,7 +317,10 @@ class Toolbox:
         if ctx.customer_id is None and not args.contact:
             raise ValueError("Peça um telefone ou e-mail para a equipe retornar antes de registrar.")
         now = self.clock.now()
-        protocol = self.storage.create_ticket(
+        # Idempotent per conversation and category: a second call (models sometimes
+        # re-register after the customer confirms) returns the ticket already open.
+        existing = self.storage.open_ticket(ctx.session_id, args.category)
+        protocol = existing or self.storage.create_ticket(
             session_id=ctx.session_id,
             category=args.category,
             summary=args.summary,
@@ -336,4 +339,11 @@ class Toolbox:
             reply += (
                 f"; a loja está fechada agora e a equipe volta {describe_day(opening)}, às {opening:%H:%M}"
             )
-        return {"protocol": protocol, "category": args.category, "next_steps": reply}
+        return {
+            "protocol": protocol,
+            "already_registered": existing is not None,
+            "category": args.category,
+            "next_steps": reply,
+            "context": "o chamado leva o histórico completo desta conversa, inclusive o que o cliente "
+            "disser depois de registrado",
+        }

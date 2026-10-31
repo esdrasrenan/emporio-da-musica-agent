@@ -70,7 +70,7 @@ def cost_usd(model: str, usage: Usage | dict) -> float | None:
     ) / 1_000_000
 
 
-def grade(case: dict, replies: list[str], tools: list[str]) -> list[str]:
+def grade(case: dict, replies: list[str], tools: list[str], tickets: int = 0) -> list[str]:
     everything = fold("\n".join(replies))
     # Facts are expected in the final reply unless the case says any reply counts.
     target = everything if case.get("scope") == "all" else fold(replies[-1])
@@ -81,11 +81,8 @@ def grade(case: dict, replies: list[str], tools: list[str]) -> list[str]:
     if case.get("tools_any") and not set(case["tools_any"]) & set(tools):
         failures.append(f"none of these tools called: {case['tools_any']}")
     failures += [f"tool should not be called: {t}" for t in case.get("no_tools", []) if t in tools]
-    failures += [
-        f"{name} called {tools.count(name)}x (max {limit})"
-        for name, limit in case.get("max_calls", {}).items()
-        if tools.count(name) > limit
-    ]
+    if "max_tickets" in case and tickets > case["max_tickets"]:
+        failures.append(f"{tickets} tickets created (max {case['max_tickets']})")
     failures += [f"missing: {s!r}" for s in case.get("include", []) if fold(s) not in target]
     for key, options in case.items():
         if key.startswith("include_any") and not any(fold(o) in target for o in options):
@@ -118,7 +115,8 @@ def run_case(case: dict, settings: Settings, data: StoreData, policies: PolicyMa
             )
     except Exception as exc:  # report and keep going with the other cases
         return CaseResult(case["id"], False, [f"error: {exc}"], turns, usage.as_dict(), repr(exc))
-    failures = grade(case, [t["reply"] for t in turns], [n for t in turns for n in t["tools"]])
+    replies, tools = [t["reply"] for t in turns], [n for t in turns for n in t["tools"]]
+    failures = grade(case, replies, tools, tickets=len(storage.tickets()))
     return CaseResult(case["id"], not failures, failures, turns, usage.as_dict())
 
 

@@ -6,7 +6,7 @@
 #   include_any        - at least one of these must appear in the final reply
 #   exclude            - strings that must not appear in any reply
 #   together           - [a, b] pairs: if a appears, b must appear too
-#   max_calls          - upper bound of calls per tool (e.g. no duplicate tickets)
+#   max_tickets        - upper bound of tickets actually created (no duplicates)
 #   scope: all         - include checks look at every reply instead of the final one
 # Every case also fails on emojis or markdown "**" bold (WhatsApp house style).
 # Matching ignores case and accents. Default clock: Tuesday 2026-03-24 10:30.
@@ -106,7 +106,8 @@
   turns: ["Vi que o Takamine GD20 estava com 12% de desconto, ainda vale?"]
   tools: [search_products]
   include: ["2.199"]
-  include_any: ["nao esta", "nao vale", "encerr", "expir", "vigente", "nao temos", "nao ha"]
+  include_any: ["nao esta", "nao vale", "encerr", "expir", "vigente", "nao temos", "nao ha",
+                "acabou", "sem desconto", "sem promocao", "nao encontrei"]
 
 - id: installments
   why: Installment rules computed by code (policy 3.1)
@@ -126,7 +127,8 @@
   turns: ["Vocês vendem cordas de violão e pedal de guitarra?"]
   no_tools: [quote_purchase, get_order_status, create_support_ticket]
   include_any: ["nao vendemos", "nao trabalhamos", "somente instrumentos", "apenas instrumentos",
-                "so instrumentos", "exclusivamente", "nao comercializamos", "so vendemos", "so trabalhamos"]
+                "so instrumentos", "exclusivamente", "nao comercializamos", "so vendemos", "so trabalhamos",
+                "nao vende", "so com instrumentos"]
 
 - id: off-topic
   why: Unrelated question
@@ -147,7 +149,7 @@
     - "É o pedido 7, e-mail leticia.rocha@jmail.com. Pode me ligar no (67) 99789-0123"
     - "Pode registrar, sim."  # some models confirm before acting; the ticket must exist once
   tools: [create_support_ticket]
-  max_calls: {create_support_ticket: 1}
+  max_tickets: 1
   scope: all  # protocol and warranty date may come in turn 2 or 3
   include_any: ["EM-2026"]
   include_any_2: ["18/05"]  # legal warranty still valid
@@ -168,6 +170,8 @@
     - "Quero falar com um atendente humano. Sou o João, meu telefone é (67) 99999-1234."
     - "É sobre a nota fiscal de uma compra que fiz semana passada."
   tools: [create_support_ticket]
+  max_tickets: 1
+  scope: all  # the return time may be given in either turn
   include_any: ["segunda"]
 
 - id: english-speaker
